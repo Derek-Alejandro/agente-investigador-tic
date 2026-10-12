@@ -1,0 +1,341 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Agente Investigador TIC | TecNM Pachuca</title>
+
+    <meta name="description"
+          content="Agente académico de investigación en TIC con inteligencia artificial y búsqueda web.">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+          rel="stylesheet">
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css"
+          rel="stylesheet">
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css"
+          rel="stylesheet">
+
+    <link href="assets/css/styles.css" rel="stylesheet">
+</head>
+
+<body>
+    <div class="app-shell">
+
+        <!-- PANEL LATERAL -->
+
+        <aside id="sidebar" class="app-sidebar">
+            <div class="sidebar-brand">
+                <span class="brand-icon">
+                    <i class="bi bi-cpu-fill"></i>
+                </span>
+
+                <div>
+                    <strong>INVESTIGADOR TIC</strong>
+                    <small>TECNM · PACHUCA</small>
+                </div>
+
+                <button id="cerrarSidebar"
+                        class="icon-btn sidebar-close"
+                        aria-label="Cerrar menú">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+
+            <button id="btnNueva"
+                    class="btn btn-primary new-chat-btn">
+                <i class="bi bi-plus-lg me-2"></i>
+                Nueva investigación
+            </button>
+
+            <div class="sidebar-section-title">
+                <i class="bi bi-clock-history me-2"></i>
+                HISTORIAL
+            </div>
+
+            <input id="buscarHistorial"
+                   class="form-control history-search"
+                   placeholder="Buscar investigación..."
+                   aria-label="Buscar en el historial">
+
+            <div id="listaHistorial" class="history-list">
+                <div class="history-empty">
+                    Aún no hay investigaciones guardadas.
+                </div>
+            </div>
+
+            <div class="sidebar-bottom">
+                <span>
+                    <i class="bi bi-hdd me-2"></i>
+                    Historial local
+                </span>
+
+                <button id="btnBorrarHistorial"
+                        class="sidebar-link">
+                    <i class="bi bi-trash3 me-2"></i>
+                    Borrar historial
+                </button>
+            </div>
+        </aside>
+
+        <div id="sidebarOverlay" class="sidebar-overlay"></div>
+
+        <!-- CONTENIDO PRINCIPAL -->
+
+        <div class="workspace">
+
+            <header class="topbar">
+                <div class="topbar-left">
+                    <button id="abrirSidebar"
+                            class="icon-btn menu-toggle"
+                            aria-label="Abrir menú">
+                        <i class="bi bi-list"></i>
+                    </button>
+
+                    <div class="topbar-title">
+                        <strong>Agente de Investigación</strong>
+                        <small>Inteligencia Artificial Aplicada a las TIC</small>
+                    </div>
+                </div>
+
+                <div class="topbar-right">
+                    <span class="system-badge">
+                        <span class="status-dot"></span>
+                        OpenAI · Vercel
+                    </span>
+                </div>
+            </header>
+
+            <main class="workspace-main">
+
+                <!-- PRESENTACIÓN -->
+
+                <section class="welcome-panel">
+                    <div>
+                        <span class="eyebrow">
+                            PRÁCTICA 2.2 · INTELIGENCIA ARTIFICIAL
+                        </span>
+
+                        <h1>
+                            Investigación inteligente
+                            <span>especializada en TIC</span>
+                        </h1>
+
+                        <p>
+                            Investiga temas del Instituto Tecnológico de
+                            Pachuca y de Ingeniería en Tecnologías de la
+                            Información y Comunicaciones, mediante búsqueda
+                            web, análisis de fuentes y síntesis académica.
+                        </p>
+
+                        <div class="feature-chips">
+                            <span><i class="bi bi-globe2"></i> Búsqueda web</span>
+                            <span><i class="bi bi-shield-check"></i> Especialización TIC</span>
+                            <span><i class="bi bi-file-earmark-pdf"></i> Reportes PDF</span>
+                            <span><i class="bi bi-clock-history"></i> Historial</span>
+                        </div>
+                    </div>
+
+                    <div class="hero-symbol">
+                        <i class="bi bi-diagram-3"></i>
+                    </div>
+                </section>
+
+                <!-- CONSULTA -->
+
+                <section class="workspace-card composer-card">
+                    <div class="section-heading">
+                        <div class="heading-icon">
+                            <i class="bi bi-chat-square-text"></i>
+                        </div>
+
+                        <div>
+                            <span class="section-kicker">NUEVA CONSULTA</span>
+                            <h2>Pregunta de investigación</h2>
+                            <p>
+                                Introduce una pregunta sobre el Tec de Pachuca,
+                                redes, IA, programación, ciberseguridad u otras TIC.
+                            </p>
+                        </div>
+                    </div>
+
+                    <textarea
+                        id="pregunta"
+                        class="form-control question-input"
+                        maxlength="3000"
+                        rows="4"
+                        placeholder="Ejemplo: ¿Cuáles son las aplicaciones actuales de la inteligencia artificial en la seguridad de redes?"
+                    ></textarea>
+
+                    <div class="composer-footer">
+                        <span id="contadorCaracteres" class="text-muted small">
+                            0 / 3000 caracteres
+                        </span>
+
+                        <button id="btnInvestigar"
+                                class="btn btn-primary action-btn">
+                            <i class="bi bi-search me-2"></i>
+                            Iniciar investigación
+                        </button>
+                    </div>
+                </section>
+
+                <!-- ERRORES -->
+
+                <div id="error"
+                     class="alert alert-danger d-none"
+                     role="alert"></div>
+
+                <!-- ACTIVIDAD -->
+
+                <section id="actividad"
+                         class="workspace-card d-none">
+
+                    <div class="section-heading">
+                        <div class="heading-icon">
+                            <i class="bi bi-activity"></i>
+                        </div>
+
+                        <div>
+                            <span class="section-kicker">PROCESAMIENTO</span>
+                            <h2>Actividad del agente</h2>
+                            <p>Seguimiento de la investigación en tiempo real.</p>
+                        </div>
+                    </div>
+
+                    <div id="estadoActual" class="status-message" aria-live="polite">
+                        Preparando investigación...
+                    </div>
+
+                    <div class="process-track">
+                        <div class="process-step" data-etapa="analizando">
+                            <div class="process-bullet">
+                                <i class="bi bi-lightbulb"></i>
+                            </div>
+                            <span>Analizar</span>
+                        </div>
+
+                        <div class="process-step" data-etapa="busqueda">
+                            <div class="process-bullet">
+                                <i class="bi bi-globe"></i>
+                            </div>
+                            <span>Buscar</span>
+                        </div>
+
+                        <div class="process-step" data-etapa="revision">
+                            <div class="process-bullet">
+                                <i class="bi bi-journal-check"></i>
+                            </div>
+                            <span>Revisar</span>
+                        </div>
+
+                        <div class="process-step" data-etapa="finalizando">
+                            <div class="process-bullet">
+                                <i class="bi bi-check2-circle"></i>
+                            </div>
+                            <span>Sintetizar</span>
+                        </div>
+                    </div>
+
+                    <div class="activity-grid">
+
+                        <div class="activity-box">
+                            <div class="box-title">
+                                <i class="bi bi-file-text me-2"></i>
+                                Borrador del reporte
+                            </div>
+
+                            <div id="previewContent" class="preview-content">
+                                El reporte aparecerá conforme el agente redacte.
+                            </div>
+                        </div>
+
+                        <div class="activity-box">
+                            <div class="box-title">
+                                <span>
+                                    <i class="bi bi-link-45deg me-2"></i>
+                                    Fuentes detectadas
+                                </span>
+
+                                <span id="contadorFuentes"
+                                      class="counter-pill">0</span>
+                            </div>
+
+                            <div id="fuentesEnVivo" class="live-sources">
+                                <p class="text-muted">
+                                    Las fuentes aparecerán durante la investigación.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- RESULTADOS -->
+
+                <section id="resultado" class="d-none">
+
+                    <div class="result-heading">
+                        <div>
+                            <span class="section-kicker">RESULTADO FINAL</span>
+                            <h2>Reporte de investigación</h2>
+                            <p>Documento académico generado por el agente.</p>
+                        </div>
+
+                        <div class="result-actions">
+                            <button id="btnPDF"
+                                    class="btn btn-primary">
+                                <i class="bi bi-file-earmark-pdf me-2"></i>
+                                Exportar PDF
+                            </button>
+
+                            <button id="btnCopiar"
+                                    class="btn btn-outline-secondary">
+                                <i class="bi bi-clipboard me-2"></i>
+                                Copiar
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="documentoExportar">
+                        <div id="reporte" class="report-layout"></div>
+
+                        <section class="workspace-card references-card">
+                            <div class="references-heading">
+                                <div>
+                                    <span class="section-kicker">REFERENCIAS</span>
+                                    <h2>Fuentes consultadas</h2>
+                                </div>
+
+                                <span id="contadorFuentesFinal"
+                                      class="counter-pill">0</span>
+                            </div>
+
+                            <div id="fuentesFinales"
+                                 class="sources-grid"></div>
+                        </section>
+                    </div>
+                </section>
+
+            </main>
+
+            <footer class="footer">
+                Desarrollado por Derek Alejandro Vargas Meneses
+                · ITIC · 22200792 · TecNM Pachuca
+                · Práctica 2.2
+            </footer>
+        </div>
+    </div>
+
+    <!-- PDF -->
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+    <script src="assets/js/app.js"></script>
+</body>
+</html>
