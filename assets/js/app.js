@@ -1,9 +1,9 @@
 
 "use strict";
 
-// ==========================================================
+// =====================================================
 // CONFIGURACIÓN
-// ==========================================================
+// =====================================================
 
 const API_BASE_URL =
     "https://agente-investigador-tic-dun.vercel.app";
@@ -12,26 +12,24 @@ const STORAGE_KEY = "agente_tic_historial_v1";
 const MAX_HISTORIAL = 25;
 const MAX_PREGUNTA = 3000;
 
-// ==========================================================
-// ELEMENTOS
-// ==========================================================
-
 const $ = id => document.getElementById(id);
 
 const btnInvestigar = $("btnInvestigar");
 const btnNueva = $("btnNueva");
 const btnPDF = $("btnPDF");
 const btnCopiar = $("btnCopiar");
-
 const pregunta = $("pregunta");
 const contadorCaracteres = $("contadorCaracteres");
+
 const actividad = $("actividad");
 const estadoActual = $("estadoActual");
 const previewContent = $("previewContent");
+
 const fuentesEnVivo = $("fuentesEnVivo");
 const fuentesFinales = $("fuentesFinales");
 const contadorFuentes = $("contadorFuentes");
 const contadorFuentesFinal = $("contadorFuentesFinal");
+
 const resultado = $("resultado");
 const reporte = $("reporte");
 const errorPanel = $("error");
@@ -47,10 +45,11 @@ let historial = cargarHistorial();
 let investigacionActualId = null;
 let investigando = false;
 let controlador = null;
+let generacionActual = 0;
 
-// ==========================================================
-// EVENTOS
-// ==========================================================
+// =====================================================
+// INICIALIZACIÓN
+// =====================================================
 
 btnInvestigar.addEventListener("click", investigar);
 btnNueva.addEventListener("click", nuevaInvestigacion);
@@ -77,23 +76,27 @@ buscarHistorial.addEventListener(
     "input", renderizarHistorial
 );
 
-pregunta.addEventListener("input", () => {
-    contadorCaracteres.textContent =
-        `${pregunta.value.length} / ${MAX_PREGUNTA} caracteres`;
-});
+pregunta.addEventListener("input", actualizarCaracteres);
 
-pregunta.addEventListener("keydown", event => {
-    if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
-        event.preventDefault();
+pregunta.addEventListener("keydown", evento => {
+    if (evento.key === "Enter" &&
+        (evento.ctrlKey || evento.metaKey)) {
+        evento.preventDefault();
         investigar();
     }
 });
 
+actualizarCaracteres();
 renderizarHistorial();
 
-// ==========================================================
-// INVESTIGACIÓN
-// ==========================================================
+function actualizarCaracteres() {
+    contadorCaracteres.textContent =
+        `${pregunta.value.length} / ${MAX_PREGUNTA} caracteres`;
+}
+
+// =====================================================
+// INVESTIGACIÓN CON VERCEL
+// =====================================================
 
 async function investigar() {
     if (investigando) return;
@@ -111,11 +114,13 @@ async function investigar() {
     }
 
     prepararInterfaz();
+
     investigando = true;
-    controlador = new AbortController();
     btnInvestigar.disabled = true;
 
-    let recibioCompletado = false;
+    const token = ++generacionActual;
+    const abort = new AbortController();
+    controlador = abort;
 
     try {
         const respuesta = await fetch(
@@ -128,7 +133,7 @@ async function investigar() {
                 body: JSON.stringify({
                     pregunta: textoPregunta
                 }),
-                signal: controlador.signal
+                signal: abort.signal
             }
         );
 
@@ -138,89 +143,111 @@ async function investigar() {
             );
         }
 
-        const resultadoStream = await procesarStream(respuesta);
+        const estado = await procesarStream(
+            respuesta,
+            token
+        );
 
-        recibioCompletado = resultadoStream.completado;
+        if (token !== generacionActual) return;
 
-        if (!respuesta.ok && !resultadoStream.conError) {
+        if (!respuesta.ok && !estado.error) {
             throw new Error(
-                `Error HTTP ${respuesta.status} al investigar.`
+                `Error HTTP ${respuesta.status}.`
             );
         }
 
-        if (!recibioCompletado && !resultadoStream.conError) {
+        if (!estado.completado && !estado.error) {
             throw new Error(
-                "La investigación terminó sin confirmación del servidor."
+                "La investigación terminó sin confirmación."
             );
         }
 
-        if (recibioCompletado) {
+        if (estado.completado) {
             guardarInvestigacion(textoPregunta);
         }
 
     } catch (err) {
+        if (token !== generacionActual) return;
+
         if (err.name === "AbortError") {
             mostrarError("Investigación cancelada.");
         } else {
             mostrarError(
-                err.message || "No se pudo realizar la investigación."
+                err.message ||
+                "No fue posible realizar la investigación."
             );
         }
+
     } finally {
-        investigando = false;
-        controlador = null;
-        btnInvestigar.disabled = false;
+        if (token === generacionActual) {
+            investigando = false;
+            controlador = null;
+            btnInvestigar.disabled = false;
+        }
     }
 }
 
-// ==========================================================
-// LECTOR DE SSE
-// ==========================================================
+// =====================================================
+// LECTURA DEL STREAM SSE
+// =====================================================
 
-async function procesarStream(respuesta) {
+async function procesarStream(respuesta, token) {
     const reader = respuesta.body.getReader();
     const decoder = new TextDecoder("utf-8");
 
     let buffer = "";
-    let completado = false;
-    let conError = false;
+    const estado = {
+        completado: false,
+        error: false
+    };
 
-    function manejarBloque(bloque) {
-        const resultadoEvento = procesarEventoSSE(bloque);
+    function procesarBloque(bloque) {
+        if (token !== generacionActual) return;
 
-        if (resultadoEvento === "completado") {
-            completado = true;
+        const tipo = procesarEventoSSE(bloque);
+
+        if (tipo === "completado") {
+            estado.completado = true;
         }
 
-        if (resultadoEvento === "error") {
-            conError = true;
-        }
-    }
-
-    while (true) {
-        const { value, done } = await reader.read();
-
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        buffer = buffer.replace(/\r\n/g, "\n");
-
-        const bloques = buffer.split("\n\n");
-        buffer = bloques.pop();
-
-        for (const bloque of bloques) {
-            if (bloque.trim()) manejarBloque(bloque);
+        if (tipo === "error") {
+            estado.error = true;
         }
     }
 
-    buffer += decoder.decode();
-    buffer = buffer.replace(/\r\n/g, "\n");
+    try {
+        while (true) {
+            const { value, done } = await reader.read();
 
-    if (buffer.trim()) {
-        manejarBloque(buffer);
+            if (done || token !== generacionActual) break;
+
+            buffer += decoder.decode(value, {
+                stream: true
+            });
+
+            buffer = buffer.replace(/\r\n?/g, "\n");
+
+            const bloques = buffer.split("\n\n");
+            buffer = bloques.pop() || "";
+
+            for (const bloque of bloques) {
+                if (bloque.trim()) {
+                    procesarBloque(bloque);
+                }
+            }
+        }
+
+        buffer += decoder.decode();
+
+        if (buffer.trim() && token === generacionActual) {
+            procesarBloque(buffer);
+        }
+
+    } finally {
+        reader.releaseLock();
     }
 
-    return { completado, conError };
+    return estado;
 }
 
 function procesarEventoSSE(bloque) {
@@ -271,22 +298,24 @@ function procesarEventoSSE(bloque) {
                 contenido.reporte || reporteCompleto;
 
             finalizarInvestigacion();
+
             return "completado";
 
         case "error":
             mostrarError(
                 contenido.mensaje ||
-                "La investigación se interrumpió."
+                "El servidor interrumpió la investigación."
             );
+
             return "error";
     }
 
     return null;
 }
 
-// ==========================================================
-// INTERFAZ DE PROCESAMIENTO
-// ==========================================================
+// =====================================================
+// INTERFAZ DE INVESTIGACIÓN
+// =====================================================
 
 function prepararInterfaz() {
     fuentesConsultadas = [];
@@ -297,20 +326,21 @@ function prepararInterfaz() {
     resultado.classList.add("d-none");
     actividad.classList.remove("d-none");
 
-    reporte.innerHTML = "";
-    fuentesFinales.innerHTML = "";
-    fuentesEnVivo.innerHTML = "";
+    reporte.replaceChildren();
+    fuentesFinales.replaceChildren();
+    fuentesEnVivo.replaceChildren();
 
-    contadorFuentes.textContent = "0";
-    contadorFuentesFinal.textContent = "0";
+    actualizarContadores();
 
     previewContent.textContent =
         "El agente está preparando la investigación...";
 
     actualizarEstado(
         "analizando",
-        "Analizando y verificando la pregunta..."
+        "Verificando la temática de la consulta..."
     );
+
+    renderizarHistorial();
 }
 
 function actualizarEstado(etapa, mensaje) {
@@ -325,34 +355,45 @@ function actualizarEstado(etapa, mensaje) {
 
     const indiceActual = orden.indexOf(etapa);
 
-    document.querySelectorAll(".process-step").forEach(paso => {
-        const indice = orden.indexOf(paso.dataset.etapa);
+    document.querySelectorAll(".process-step")
+        .forEach(paso => {
+            const indice = orden.indexOf(
+                paso.dataset.etapa
+            );
 
-        paso.classList.remove("active", "complete");
+            paso.classList.remove(
+                "active",
+                "complete"
+            );
 
-        if (indiceActual < 0) return;
+            if (indiceActual < 0) return;
 
-        if (indice < indiceActual) {
-            paso.classList.add("complete");
-        } else if (indice === indiceActual) {
-            paso.classList.add("active");
-        }
-    });
+            if (indice < indiceActual) {
+                paso.classList.add("complete");
+            } else if (indice === indiceActual) {
+                paso.classList.add("active");
+            }
+        });
 }
 
 function actualizarPreview() {
-    const texto = limpiarMarkdownBasico(reporteCompleto);
-    previewContent.textContent = texto.slice(-3500);
-    previewContent.scrollTop = previewContent.scrollHeight;
+    previewContent.textContent =
+        limpiarMarkdownBasico(reporteCompleto)
+            .slice(-3500);
+
+    previewContent.scrollTop =
+        previewContent.scrollHeight;
 }
 
 function finalizarInvestigacion() {
-    document.querySelectorAll(".process-step").forEach(paso => {
-        paso.classList.remove("active");
-        paso.classList.add("complete");
-    });
+    document.querySelectorAll(".process-step")
+        .forEach(paso => {
+            paso.classList.remove("active");
+            paso.classList.add("complete");
+        });
 
-    estadoActual.textContent = "Investigación completada.";
+    estadoActual.textContent =
+        "Investigación completada.";
 
     mostrarReporte();
 
@@ -371,7 +412,9 @@ function mostrarReporte() {
 }
 
 function mostrarError(mensaje) {
-    errorPanel.textContent = mensaje || "Ocurrió un error.";
+    errorPanel.textContent =
+        mensaje || "Ocurrió un error.";
+
     errorPanel.classList.remove("d-none");
 
     if (!actividad.classList.contains("d-none")) {
@@ -380,22 +423,26 @@ function mostrarError(mensaje) {
     }
 }
 
-// ==========================================================
-// FUENTES
-// ==========================================================
+// =====================================================
+// FUENTES CONSULTADAS
+// =====================================================
 
 function agregarFuente(fuente) {
     const url = normalizarUrl(fuente?.url);
 
     if (!url) return;
 
-    if (fuentesConsultadas.some(f => f.url === url)) {
+    if (fuentesConsultadas.some(
+        item => item.url === url
+    )) {
         return;
     }
 
     fuentesConsultadas.push({
         url,
-        titulo: String(fuente.titulo || obtenerDominio(url)),
+        titulo: String(
+            fuente.titulo || obtenerDominio(url)
+        ),
         origen: String(fuente.origen || "web")
     });
 
@@ -405,20 +452,21 @@ function agregarFuente(fuente) {
 
 function actualizarContadores() {
     const total = String(fuentesConsultadas.length);
+
     contadorFuentes.textContent = total;
     contadorFuentesFinal.textContent = total;
 }
 
 function renderizarFuentesEnVivo() {
-    fuentesEnVivo.innerHTML = "";
+    fuentesEnVivo.replaceChildren();
 
     if (!fuentesConsultadas.length) {
         fuentesEnVivo.textContent =
-            "Esperando las fuentes del agente...";
+            "Esperando fuentes consultadas...";
         return;
     }
 
-    fuentesConsultadas.forEach(fuente => {
+    for (const fuente of fuentesConsultadas) {
         const tarjeta = document.createElement("div");
         tarjeta.className = "live-source-card";
 
@@ -426,28 +474,33 @@ function renderizarFuentesEnVivo() {
         enlace.href = fuente.url;
         enlace.target = "_blank";
         enlace.rel = "noopener noreferrer";
-        enlace.textContent =
-            fuente.titulo || obtenerDominio(fuente.url);
+        enlace.textContent = fuente.titulo;
 
         const dominio = document.createElement("div");
         dominio.className = "source-domain";
-        dominio.textContent = obtenerDominio(fuente.url);
+        dominio.textContent =
+            obtenerDominio(fuente.url);
 
         tarjeta.append(enlace, dominio);
         fuentesEnVivo.appendChild(tarjeta);
-    });
+    }
 
-    fuentesEnVivo.scrollTop = fuentesEnVivo.scrollHeight;
+    fuentesEnVivo.scrollTop =
+        fuentesEnVivo.scrollHeight;
 }
 
 function renderizarFuentesFinales() {
-    fuentesFinales.innerHTML = "";
+    fuentesFinales.replaceChildren();
 
     actualizarContadores();
 
     if (!fuentesConsultadas.length) {
-        fuentesFinales.innerHTML =
-            "<p class='text-muted'>Sin fuentes disponibles.</p>";
+        const aviso = document.createElement("p");
+        aviso.className = "text-muted";
+        aviso.textContent =
+            "No se recibieron referencias web.";
+
+        fuentesFinales.appendChild(aviso);
         return;
     }
 
@@ -456,14 +509,14 @@ function renderizarFuentesFinales() {
         tarjeta.className = "source-ref-card";
 
         const numero = document.createElement("small");
-        numero.textContent = `REFERENCIA ${indice + 1}`;
+        numero.textContent =
+            `REFERENCIA ${indice + 1}`;
 
         const enlace = document.createElement("a");
         enlace.href = fuente.url;
         enlace.target = "_blank";
         enlace.rel = "noopener noreferrer";
-        enlace.textContent =
-            fuente.titulo || obtenerDominio(fuente.url);
+        enlace.textContent = fuente.titulo;
 
         const url = document.createElement("small");
         url.textContent = fuente.url;
@@ -473,9 +526,9 @@ function renderizarFuentesFinales() {
     });
 }
 
-// ==========================================================
-// REPORTE ACADÉMICO
-// ==========================================================
+// =====================================================
+// RENDERIZADO DEL REPORTE
+// =====================================================
 
 function renderizarReporteFinal(markdown) {
     const parsed = parseStructuredMarkdown(markdown);
@@ -495,7 +548,9 @@ function renderizarReporteFinal(markdown) {
 
     let html = `
         <header class="report-hero">
-            <span class="eyebrow">REPORTE ACADÉMICO · ITIC</span>
+            <span class="eyebrow">
+                REPORTE ACADÉMICO · ITIC
+            </span>
             <h2>${escaparHTML(parsed.title)}</h2>
             <p>${escaparHTML(
                 limpiarMarkdownBasico(resumen).slice(0, 350)
@@ -526,6 +581,7 @@ function renderizarReporteFinal(markdown) {
                     </div>
                     <h3>${escaparHTML(nombre)}</h3>
                 </div>
+
                 <div class="report-card-body">
                     ${cuerpo}
                 </div>
@@ -537,26 +593,26 @@ function renderizarReporteFinal(markdown) {
 }
 
 function parseStructuredMarkdown(markdown) {
-    const lines = String(markdown || "")
+    const lineas = String(markdown || "")
         .replace(/\r/g, "")
         .split("\n");
 
     let title = "Reporte de investigación";
-    let current = null;
+    let actual = null;
 
     const sections = {};
 
-    for (const line of lines) {
-        const titulo = line.match(/^#\s+(.+)$/);
-        const seccion = line.match(/^##\s+(.+)$/);
+    for (const linea of lineas) {
+        const titulo = linea.match(/^#\s+(.+)$/);
+        const seccion = linea.match(/^##\s+(.+)$/);
 
         if (titulo) {
             title = titulo[1].trim();
         } else if (seccion) {
-            current = seccion[1].trim();
-            sections[current] = "";
-        } else if (current) {
-            sections[current] += line + "\n";
+            actual = seccion[1].trim();
+            sections[actual] = "";
+        } else if (actual) {
+            sections[actual] += linea + "\n";
         }
     }
 
@@ -572,9 +628,11 @@ function renderPlan(texto) {
 
     return `
         <div class="plan-grid">
-            ${items.map((item, index) => `
+            ${items.map((item, indice) => `
                 <div class="plan-step">
-                    <div class="plan-number">${index + 1}</div>
+                    <div class="plan-number">
+                        ${indice + 1}
+                    </div>
                     <p>${escaparHTML(item)}</p>
                 </div>
             `).join("")}
@@ -585,7 +643,7 @@ function renderPlan(texto) {
 function renderHallazgos(texto) {
     const bloques = String(texto || "")
         .split(/(?=^###\s+Hallazgo\s+\d+)/gmi)
-        .map(item => item.trim())
+        .map(b => b.trim())
         .filter(Boolean);
 
     const hallazgos = [];
@@ -595,20 +653,30 @@ function renderHallazgos(texto) {
             continue;
         }
 
-        const nombre = extraerCampo(
-            bloque, "Nombre", ["Descripción", "Fuente", "URL"]
+        const encabezado = bloque.match(
+            /^###\s+Hallazgo\s+\d+(?:\s*:\s*(.+))?/im
         );
 
+        const nombre = extraerCampo(
+            bloque,
+            "Nombre",
+            ["Descripción", "Fuente", "URL"]
+        ) || encabezado?.[1] || "Hallazgo";
+
         const descripcion = extraerCampo(
-            bloque, "Descripción", ["Fuente", "URL"]
+            bloque,
+            "Descripción",
+            ["Fuente", "URL"]
         );
 
         const fuente = extraerCampo(
-            bloque, "Fuente", ["URL"]
+            bloque,
+            "Fuente",
+            ["URL"]
         );
 
         const url = normalizarUrl(
-            extraerCampo(bloque, "URL", [])
+            extraerCampo(bloque, "URL")
         );
 
         hallazgos.push({
@@ -633,8 +701,7 @@ function renderHallazgos(texto) {
 
                     <h4 class="finding-name">
                         ${escaparHTML(
-                            limpiarMarkdownBasico(h.nombre) ||
-                            `Hallazgo ${i + 1}`
+                            limpiarMarkdownBasico(h.nombre)
                         )}
                     </h4>
 
@@ -678,11 +745,12 @@ function renderHallazgos(texto) {
 }
 
 function extraerCampo(bloque, campo, siguientes = []) {
-    const etiqueta = new RegExp(
-        `\\*\\*${campo}:\\*\\*\\s*`, "i"
+    const inicioRegex = new RegExp(
+        `\\*\\*${campo}:\\*\\*\\s*`,
+        "i"
     );
 
-    const inicio = etiqueta.exec(bloque);
+    const inicio = inicioRegex.exec(bloque);
 
     if (!inicio) return "";
 
@@ -691,13 +759,17 @@ function extraerCampo(bloque, campo, siguientes = []) {
 
     for (const siguiente of siguientes) {
         const regex = new RegExp(
-            `\\n\\s*\\*\\*${siguiente}:\\*\\*`, "i"
+            `\\n\\s*\\*\\*${siguiente}:\\*\\*`,
+            "i"
         );
 
-        const resultado = regex.exec(bloque.slice(start));
+        const match = regex.exec(bloque.slice(start));
 
-        if (resultado) {
-            end = Math.min(end, start + resultado.index);
+        if (match) {
+            end = Math.min(
+                end,
+                start + match.index
+            );
         }
     }
 
@@ -708,7 +780,7 @@ function renderComparacion(texto) {
     const filas = String(texto || "")
         .split("\n")
         .map(linea => linea.trim())
-        .filter(linea => /^\|/.test(linea));
+        .filter(linea => linea.startsWith("|"));
 
     if (filas.length < 3) {
         return markdownToHtml(texto);
@@ -727,17 +799,20 @@ function renderComparacion(texto) {
             <table class="compare-table">
                 <thead>
                     <tr>
-                        ${encabezados.map(columna =>
-                            `<th>${escaparHTML(columna)}</th>`
+                        ${encabezados.map(col =>
+                            `<th>${escaparHTML(col)}</th>`
                         ).join("")}
                     </tr>
                 </thead>
+
                 <tbody>
                     ${cuerpo.map(fila => `
                         <tr>
-                            ${encabezados.map((_, i) =>
-                                `<td>${escaparHTML(fila[i] || "")}</td>`
-                            ).join("")}
+                            ${encabezados.map((_, i) => `
+                                <td>
+                                    ${escaparHTML(fila[i] || "")}
+                                </td>
+                            `).join("")}
                         </tr>
                     `).join("")}
                 </tbody>
@@ -769,9 +844,11 @@ function markdownToHtml(texto) {
 
         if (/^###\s+/.test(linea)) {
             cerrarLista();
+
             html += `<h4>${formatearInline(
                 linea.replace(/^###\s+/, "")
             )}</h4>`;
+
             continue;
         }
 
@@ -806,14 +883,14 @@ function formatearInline(texto) {
 function extraerBullets(texto) {
     return String(texto || "")
         .split("\n")
-        .map(linea => linea.trim())
-        .filter(linea => /^[-*•]\s+/.test(linea))
-        .map(linea => linea.replace(/^[-*•]\s+/, ""));
+        .map(x => x.trim())
+        .filter(x => /^[-*•]\s+/.test(x))
+        .map(x => x.replace(/^[-*•]\s+/, ""));
 }
 
-// ==========================================================
+// =====================================================
 // HISTORIAL LOCAL
-// ==========================================================
+// =====================================================
 
 function cargarHistorial() {
     try {
@@ -834,18 +911,19 @@ function persistirHistorial() {
             JSON.stringify(historial)
         );
         return true;
-    } catch (err) {
-        console.error("Error guardando historial:", err);
+    } catch {
         mostrarError(
-            "La investigación terminó, pero no pudo guardarse " +
-            "en el historial de este navegador."
+            "No se pudo guardar el historial en este navegador."
         );
         return false;
     }
 }
 
 function guardarInvestigacion(textoPregunta) {
-    const id = crypto.randomUUID();
+    const id = (
+        crypto.randomUUID?.() ||
+        `${Date.now()}-${Math.random()}`
+    );
 
     const titulo = textoPregunta.length > 70
         ? textoPregunta.slice(0, 70) + "..."
@@ -870,13 +948,19 @@ function guardarInvestigacion(textoPregunta) {
 }
 
 function renderizarHistorial() {
-    const filtro = buscarHistorial.value.trim().toLowerCase();
+    const filtro = buscarHistorial.value
+        .trim()
+        .toLowerCase();
 
-    listaHistorial.innerHTML = "";
+    listaHistorial.replaceChildren();
 
     const elementos = historial.filter(item =>
-        item.titulo.toLowerCase().includes(filtro) ||
-        item.pregunta.toLowerCase().includes(filtro)
+        String(item.titulo || "")
+            .toLowerCase()
+            .includes(filtro) ||
+        String(item.pregunta || "")
+            .toLowerCase()
+            .includes(filtro)
     );
 
     if (!elementos.length) {
@@ -903,16 +987,17 @@ function renderizarHistorial() {
         titulo.textContent = item.titulo;
 
         const fecha = document.createElement("small");
-
         const fechaValida = new Date(item.fecha);
 
-        fecha.textContent = Number.isNaN(fechaValida.getTime())
-            ? "Sin fecha"
-            : fechaValida.toLocaleString("es-MX");
+        fecha.textContent =
+            Number.isNaN(fechaValida.getTime())
+                ? "Sin fecha"
+                : fechaValida.toLocaleString("es-MX");
 
         abrir.append(titulo, fecha);
-        abrir.addEventListener("click", () =>
-            abrirInvestigacion(item.id)
+        abrir.addEventListener(
+            "click",
+            () => abrirInvestigacion(item.id)
         );
 
         const acciones = document.createElement("div");
@@ -920,20 +1005,30 @@ function renderizarHistorial() {
 
         const renombrar = document.createElement("button");
         renombrar.title = "Renombrar";
-        renombrar.setAttribute("aria-label", "Renombrar investigación");
-        renombrar.innerHTML = '<i class="bi bi-pencil"></i>';
+        renombrar.setAttribute(
+            "aria-label",
+            "Renombrar investigación"
+        );
+        renombrar.innerHTML =
+            '<i class="bi bi-pencil"></i>';
 
-        renombrar.addEventListener("click", () =>
-            renombrarInvestigacion(item.id)
+        renombrar.addEventListener(
+            "click",
+            () => renombrarInvestigacion(item.id)
         );
 
         const eliminar = document.createElement("button");
         eliminar.title = "Eliminar";
-        eliminar.setAttribute("aria-label", "Eliminar investigación");
-        eliminar.innerHTML = '<i class="bi bi-trash"></i>';
+        eliminar.setAttribute(
+            "aria-label",
+            "Eliminar investigación"
+        );
+        eliminar.innerHTML =
+            '<i class="bi bi-trash"></i>';
 
-        eliminar.addEventListener("click", () =>
-            eliminarInvestigacion(item.id)
+        eliminar.addEventListener(
+            "click",
+            () => eliminarInvestigacion(item.id)
         );
 
         acciones.append(renombrar, eliminar);
@@ -944,7 +1039,9 @@ function renderizarHistorial() {
 
 function abrirInvestigacion(id) {
     if (investigando) {
-        alert("Espera a que termine la investigación actual.");
+        alert(
+            "Espera a que termine la investigación actual."
+        );
         return;
     }
 
@@ -956,10 +1053,9 @@ function abrirInvestigacion(id) {
 
     pregunta.value = item.pregunta;
     reporteCompleto = item.reporte;
-    fuentesConsultadas = [...item.fuentes];
+    fuentesConsultadas = [...(item.fuentes || [])];
 
-    contadorCaracteres.textContent =
-        `${pregunta.value.length} / ${MAX_PREGUNTA} caracteres`;
+    actualizarCaracteres();
 
     errorPanel.classList.add("d-none");
     actividad.classList.add("d-none");
@@ -993,11 +1089,15 @@ function renombrarInvestigacion(id) {
 }
 
 function eliminarInvestigacion(id) {
-    if (!confirm("¿Eliminar esta investigación del historial?")) {
+    if (!confirm(
+        "¿Eliminar esta investigación del historial?"
+    )) {
         return;
     }
 
-    historial = historial.filter(item => item.id !== id);
+    historial = historial.filter(
+        item => item.id !== id
+    );
 
     if (investigacionActualId === id) {
         investigacionActualId = null;
@@ -1010,7 +1110,9 @@ function eliminarInvestigacion(id) {
 function borrarHistorial() {
     if (!historial.length) return;
 
-    if (!confirm("¿Eliminar todo el historial guardado?")) {
+    if (!confirm(
+        "¿Eliminar todo el historial guardado?"
+    )) {
         return;
     }
 
@@ -1023,11 +1125,18 @@ function borrarHistorial() {
 
 function nuevaInvestigacion() {
     if (investigando) {
-        if (!confirm("¿Cancelar la investigación en curso?")) {
+        if (!confirm(
+            "¿Cancelar la investigación en curso?"
+        )) {
             return;
         }
 
+        generacionActual++;
         controlador?.abort();
+
+        investigando = false;
+        controlador = null;
+        btnInvestigar.disabled = false;
     }
 
     investigacionActualId = null;
@@ -1035,19 +1144,23 @@ function nuevaInvestigacion() {
     fuentesConsultadas = [];
 
     pregunta.value = "";
-    contadorCaracteres.textContent = "0 / 3000 caracteres";
+    actualizarCaracteres();
 
     resultado.classList.add("d-none");
     actividad.classList.add("d-none");
     errorPanel.classList.add("d-none");
 
-    reporte.innerHTML = "";
-    fuentesFinales.innerHTML = "";
+    reporte.replaceChildren();
+    fuentesFinales.replaceChildren();
 
     renderizarHistorial();
     cambiarSidebar(false);
 
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    window.scrollTo({
+        top: 0,
+        behavior: "smooth"
+    });
+
     pregunta.focus();
 }
 
@@ -1056,97 +1169,190 @@ function cambiarSidebar(abierto) {
     sidebarOverlay.classList.toggle("show", abierto);
 }
 
-// ==========================================================
-// EXPORTACIÓN PDF
-// ==========================================================
+// =====================================================
+// EXPORTACIÓN PDF CORREGIDA
+// =====================================================
 
 async function exportarPDF() {
     if (!reporteCompleto.trim()) {
-        mostrarError("No existe un reporte para exportar.");
+        mostrarError(
+            "No existe un reporte para exportar."
+        );
         return;
     }
 
     if (typeof html2pdf === "undefined") {
-        mostrarError("No se pudo cargar el generador PDF.");
+        mostrarError(
+            "No se pudo cargar la biblioteca PDF."
+        );
         return;
     }
 
-    const original = btnPDF.innerHTML;
+    const contenidoOriginal =
+        $("documentoExportar");
+
+    if (!contenidoOriginal) {
+        mostrarError(
+            "No se encontró el documento para exportar."
+        );
+        return;
+    }
+
+    const botonOriginal = btnPDF.innerHTML;
+    let capaPDF = null;
+
     btnPDF.disabled = true;
-    btnPDF.textContent = "Generando PDF...";
 
-    const contenedor = document.createElement("div");
-    contenedor.className = "pdf-export";
-
-    const encabezado = document.createElement("div");
-    encabezado.style.padding = "10px 12px 22px";
-    encabezado.innerHTML = `
-        <h2 style="margin:0;font-size:22px;color:#18243a">
-            Instituto Tecnológico de Pachuca
-        </h2>
-        <p style="margin:8px 0;font-size:13px">
-            Ingeniería en Tecnologías de la Información
-            y Comunicaciones
-        </p>
-        <p style="font-size:12px">
-            Agente Investigador TIC · Práctica 2.2
-        </p>
+    btnPDF.innerHTML = `
+        <span class="spinner-border spinner-border-sm me-2"></span>
+        Generando PDF...
     `;
 
-    contenedor.appendChild(encabezado);
-
-    const contenido = $("documentoExportar").cloneNode(true);
-    contenido.removeAttribute("id");
-
-    contenedor.appendChild(contenido);
-
-    contenedor.style.position = "fixed";
-    contenedor.style.left = "-12000px";
-    contenedor.style.top = "0";
-    document.body.appendChild(contenedor);
-
-    const opciones = {
-        margin: 8,
-        filename: `investigacion-tic-${Date.now()}.pdf`,
-        image: {
-            type: "jpeg",
-            quality: 0.98
-        },
-        html2canvas: {
-            scale: 1.5,
-            useCORS: true,
-            windowWidth: 1000,
-            scrollX: 0,
-            scrollY: 0
-        },
-        jsPDF: {
-            unit: "mm",
-            format: "a4",
-            orientation: "portrait"
-        },
-        pagebreak: {
-            mode: ["css", "legacy"]
-        }
-    };
+    errorPanel.classList.add("d-none");
 
     try {
+        // Capa temporal situada dentro del área capturable.
+        // No usamos display:none ni coordenadas negativas.
+
+        capaPDF = document.createElement("div");
+        capaPDF.className = "pdf-capture-layer";
+
+        const documento = document.createElement("div");
+        documento.className = "pdf-export";
+
+        // Encabezado institucional.
+
+        const encabezado = document.createElement("header");
+        encabezado.className = "pdf-institution-header";
+
+        const instituto = document.createElement("h2");
+        instituto.textContent =
+            "Instituto Tecnológico de Pachuca";
+
+        const carrera = document.createElement("p");
+        carrera.textContent =
+            "Ingeniería en Tecnologías de la Información y Comunicaciones";
+
+        const actividadPDF = document.createElement("p");
+        actividadPDF.textContent =
+            "Inteligencia Artificial Aplicada a las TIC · Práctica 2.2";
+
+        const autor = document.createElement("p");
+        autor.textContent =
+            "Derek Alejandro Vargas Meneses · 22200792";
+
+        encabezado.append(
+            instituto,
+            carrera,
+            actividadPDF,
+            autor
+        );
+
+        documento.appendChild(encabezado);
+
+        // Clonar los resultados y fuentes.
+
+        const contenido =
+            contenidoOriginal.cloneNode(true);
+
+        contenido.removeAttribute("id");
+
+        documento.appendChild(contenido);
+        capaPDF.appendChild(documento);
+
+        document.body.appendChild(capaPDF);
+
+        // Esperar al cálculo de fuentes y estilos.
+
+        await document.fonts.ready;
+
+        await new Promise(resolve => {
+            requestAnimationFrame(() => {
+                requestAnimationFrame(resolve);
+            });
+        });
+
+        // Validación: no generar PDF vacío.
+
+        const textoDocumento =
+            documento.textContent.trim();
+
+        if (
+            !textoDocumento.includes(
+                "Hallazgos principales"
+            ) ||
+            !textoDocumento.includes(
+                "Conclusiones"
+            )
+        ) {
+            throw new Error(
+                "El reporte no tiene todas sus secciones."
+            );
+        }
+
+        const opciones = {
+            margin: [10, 10, 10, 10],
+
+            filename:
+                `Reporte_Investigacion_TIC_${Date.now()}.pdf`,
+
+            image: {
+                type: "jpeg",
+                quality: 0.98
+            },
+
+            html2canvas: {
+                scale: 1.5,
+                useCORS: true,
+                backgroundColor: "#ffffff",
+                scrollX: 0,
+                scrollY: 0,
+                logging: false
+            },
+
+            jsPDF: {
+                unit: "mm",
+                format: "a4",
+                orientation: "portrait"
+            },
+
+            pagebreak: {
+                mode: ["css", "legacy"],
+                avoid: [
+                    ".finding-item",
+                    ".plan-step",
+                    ".source-ref-card"
+                ]
+            }
+        };
+
         await html2pdf()
             .set(opciones)
-            .from(contenedor)
+            .from(documento)
             .save();
+
     } catch (err) {
-        console.error(err);
-        mostrarError("No se pudo generar el archivo PDF.");
+        console.error(
+            "Error de exportación PDF:",
+            err
+        );
+
+        mostrarError(
+            "No se pudo exportar el reporte: " +
+            (err.message || "Error desconocido.")
+        );
+
     } finally {
-        contenedor.remove();
+        capaPDF?.remove();
+
+        btnPDF.innerHTML = botonOriginal;
         btnPDF.disabled = false;
-        btnPDF.innerHTML = original;
     }
 }
 
-// ==========================================================
+// =====================================================
 // COPIAR REPORTE
-// ==========================================================
+// =====================================================
 
 async function copiarReporte() {
     if (!reporteCompleto.trim()) {
@@ -1155,7 +1361,9 @@ async function copiarReporte() {
     }
 
     const fuentes = fuentesConsultadas
-        .map((item, i) => `${i + 1}. ${item.url}`)
+        .map((item, indice) =>
+            `${indice + 1}. ${item.url}`
+        )
         .join("\n");
 
     const texto = [
@@ -1165,25 +1373,30 @@ async function copiarReporte() {
         fuentes
     ].join("\n");
 
+    const original = btnCopiar.innerHTML;
+
     try {
         await navigator.clipboard.writeText(texto);
 
-        const original = btnCopiar.innerHTML;
-
-        btnCopiar.textContent = "¡Copiado!";
+        btnCopiar.innerHTML = `
+            <i class="bi bi-check2 me-2"></i>
+            ¡Copiado!
+        `;
 
         setTimeout(() => {
             btnCopiar.innerHTML = original;
         }, 1800);
 
     } catch {
-        mostrarError("No se pudo copiar el reporte.");
+        mostrarError(
+            "No fue posible copiar el reporte."
+        );
     }
 }
 
-// ==========================================================
-// UTILIDADES
-// ==========================================================
+// =====================================================
+// UTILIDADES Y SEGURIDAD
+// =====================================================
 
 function escaparHTML(texto) {
     const div = document.createElement("div");
@@ -1195,13 +1408,18 @@ function normalizarUrl(valor) {
     if (!valor) return "";
 
     const texto = String(valor).trim();
+
     const markdown = texto.match(
         /\[[^\]]*\]\((https?:\/\/[^)]+)\)/
     );
 
     const candidata = markdown
         ? markdown[1]
-        : (texto.match(/https?:\/\/[^\s)\]]+/i) || [])[0];
+        : (
+            texto.match(
+                /https?:\/\/[^\s)\]]+/i
+            ) || []
+        )[0];
 
     if (!candidata) return "";
 
@@ -1210,9 +1428,13 @@ function normalizarUrl(valor) {
             candidata.replace(/[.,;]+$/, "")
         );
 
-        return ["https:", "http:"].includes(url.protocol)
-            ? url.href
-            : "";
+        if (!["https:", "http:"].includes(
+            url.protocol
+        )) {
+            return "";
+        }
+
+        return url.href;
     } catch {
         return "";
     }
@@ -1220,7 +1442,9 @@ function normalizarUrl(valor) {
 
 function obtenerDominio(url) {
     try {
-        return new URL(url).hostname.replace(/^www\./, "");
+        return new URL(url)
+            .hostname
+            .replace(/^www\./, "");
     } catch {
         return "Fuente web";
     }
@@ -1230,6 +1454,9 @@ function limpiarMarkdownBasico(texto) {
     return String(texto || "")
         .replace(/^#{1,6}\s+/gm, "")
         .replace(/\*\*/g, "")
-        .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, "$1")
+        .replace(
+            /\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g,
+            "$1"
+        )
         .trim();
 }

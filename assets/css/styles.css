@@ -1,4 +1,9 @@
 
+/* =====================================================
+   AGENTE INVESTIGADOR TIC
+   INSTITUTO TECNOLÓGICO DE PACHUCA
+   ===================================================== */
+
 :root {
     --bg: #f3f6fb;
     --white: #ffffff;
@@ -51,7 +56,9 @@ input:focus-visible {
     display: flex;
 }
 
-/* SIDEBAR */
+/* =====================================================
+   SIDEBAR
+   ===================================================== */
 
 .app-sidebar {
     position: fixed;
@@ -95,7 +102,11 @@ input:focus-visible {
     display: grid;
     place-items: center;
     border-radius: 13px;
-    background: linear-gradient(135deg, #3b6bff, #8171ff);
+    background: linear-gradient(
+        135deg,
+        #3b6bff,
+        #8171ff
+    );
     font-size: 1.3rem;
 }
 
@@ -260,7 +271,9 @@ input:focus-visible {
     color: #fff;
 }
 
-/* WORKSPACE */
+/* =====================================================
+   WORKSPACE
+   ===================================================== */
 
 .workspace {
     width: calc(100% - 292px);
@@ -331,7 +344,9 @@ input:focus-visible {
     flex: 1;
 }
 
-/* PRESENTACIÓN */
+/* =====================================================
+   PRESENTACIÓN
+   ===================================================== */
 
 .welcome-panel {
     display: flex;
@@ -342,7 +357,11 @@ input:focus-visible {
     margin-bottom: 26px;
     padding: 32px 38px;
     border-radius: 22px;
-    background: linear-gradient(120deg, #101e38, #233b75);
+    background: linear-gradient(
+        120deg,
+        #101e38,
+        #233b75
+    );
     color: white;
     overflow: hidden;
 }
@@ -414,7 +433,9 @@ input:focus-visible {
     font-size: 5rem;
 }
 
-/* CARDS */
+/* =====================================================
+   TARJETAS Y CONSULTA
+   ===================================================== */
 
 .workspace-card {
     min-width: 0;
@@ -499,7 +520,9 @@ input:focus-visible {
     opacity: .65;
 }
 
-/* PROCESAMIENTO */
+/* =====================================================
+   ACTIVIDAD DEL AGENTE
+   ===================================================== */
 
 .status-message {
     padding: 14px 18px;
@@ -565,7 +588,9 @@ input:focus-visible {
 
 .activity-grid {
     display: grid;
-    grid-template-columns: minmax(0, 1.4fr) minmax(270px, .8fr);
+    grid-template-columns:
+        minmax(0, 1.4fr)
+        minmax(270px, .8fr);
     gap: 18px;
 }
 
@@ -635,7 +660,9 @@ input:focus-visible {
     overflow-wrap: anywhere;
 }
 
-/* RESULTADOS */
+/* =====================================================
+   RESULTADOS ACADÉMICOS
+   ===================================================== */
 
 .result-heading {
     display: flex;
@@ -672,7 +699,11 @@ input:focus-visible {
 .report-hero {
     padding: 29px;
     border-radius: 18px;
-    background: linear-gradient(135deg, #10213c, #253d76);
+    background: linear-gradient(
+        135deg,
+        #10213c,
+        #253d76
+    );
     color: white;
 }
 
@@ -746,6 +777,10 @@ input:focus-visible {
     margin: 20px 0 10px;
 }
 
+/* =====================================================
+   PLAN DE INVESTIGACIÓN
+   ===================================================== */
+
 .plan-grid,
 .findings-showcase {
     display: grid;
@@ -753,7 +788,10 @@ input:focus-visible {
 }
 
 .plan-grid {
-    grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr));
+    grid-template-columns: repeat(
+        auto-fit,
+        minmax(min(190px, 100%), 1fr)
+    );
 }
 
 .plan-step {
@@ -780,6 +818,10 @@ input:focus-visible {
     font-size: .87rem;
     line-height: 1.7;
 }
+
+/* =====================================================
+   HALLAZGOS
+   ===================================================== */
 
 .finding-item {
     min-width: 0;
@@ -835,6 +877,10 @@ input:focus-visible {
     font-weight: 700;
 }
 
+/* =====================================================
+   TABLA COMPARATIVA
+   ===================================================== */
+
 .compare-table-wrap {
     width: 100%;
     max-width: 100%;
@@ -871,6 +917,10 @@ input:focus-visible {
     font-weight: 800;
 }
 
+/* =====================================================
+   REFERENCIAS
+   ===================================================== */
+
 .references-card {
     margin-top: 22px;
 }
@@ -885,7 +935,10 @@ input:focus-visible {
 
 .sources-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
+    grid-template-columns: repeat(
+        auto-fit,
+        minmax(min(260px, 100%), 1fr)
+    );
     gap: 12px;
 }
 
@@ -920,40 +973,138 @@ input:focus-visible {
     font-size: .75rem;
 }
 
-/* EXPORTACIÓN PDF */
+/* =====================================================
+   EXPORTACIÓN PDF - CORRECCIÓN
+   ===================================================== */
 
-.pdf-export {
-    width: 950px !important;
-    max-width: none !important;
-    background: white;
-    padding: 15px;
+/*
+   La capa no usa:
+   display: none;
+   visibility: hidden;
+   left: -12000px;
+
+   El documento debe poder ser renderizado
+   por html2canvas.
+*/
+
+.pdf-capture-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 99999;
+
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+
+    width: 100%;
+    height: 100%;
+
+    overflow: auto;
+    background: #ffffff;
 }
 
-.pdf-export .report-card,
-.pdf-export .report-hero,
-.pdf-export .source-ref-card,
-.pdf-export .finding-item,
-.pdf-export .plan-step {
-    box-shadow: none;
+.pdf-capture-layer .pdf-export {
+    position: relative;
+
+    width: 794px !important;
+    min-width: 794px !important;
+    max-width: 794px !important;
+
+    padding: 24px !important;
+    margin: 0 !important;
+
+    background: #ffffff !important;
+    color: #18243a !important;
+
+    box-sizing: border-box;
+}
+
+/* Encabezado institucional */
+
+.pdf-institution-header {
+    padding: 20px 10px;
+    margin-bottom: 25px;
+    text-align: center;
+    border-bottom: 2px solid #345df4;
+}
+
+.pdf-institution-header h2 {
+    font-size: 21px;
+    font-weight: 800;
+    color: #18243a;
+    margin-bottom: 12px;
+}
+
+.pdf-institution-header p {
+    font-size: 12px;
+    line-height: 1.5;
+    color: #4a5870;
+    margin: 5px 0;
+}
+
+/* Adaptación del documento */
+
+.pdf-capture-layer .report-layout,
+.pdf-capture-layer .report-card,
+.pdf-capture-layer .report-hero,
+.pdf-capture-layer .references-card {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+}
+
+.pdf-capture-layer .report-hero {
+    background: #14294d !important;
+    color: #ffffff !important;
+}
+
+.pdf-capture-layer .report-card,
+.pdf-capture-layer .finding-item,
+.pdf-capture-layer .plan-step,
+.pdf-capture-layer .source-ref-card {
+    box-shadow: none !important;
     break-inside: avoid;
     page-break-inside: avoid;
 }
 
-.pdf-export .compare-table {
-    min-width: 0;
-    font-size: .75rem;
+.pdf-capture-layer .compare-table-wrap {
+    overflow: visible !important;
 }
 
-.pdf-export .compare-table th,
-.pdf-export .compare-table td {
-    padding: 8px;
+.pdf-capture-layer .compare-table {
+    width: 100% !important;
+    min-width: 0 !important;
+    table-layout: fixed;
+    font-size: 10px;
 }
 
-.pdf-export a {
+.pdf-capture-layer .compare-table th,
+.pdf-capture-layer .compare-table td {
+    padding: 7px;
     overflow-wrap: anywhere;
 }
 
-/* RESPONSIVE */
+.pdf-capture-layer .report-card-body,
+.pdf-capture-layer .finding-description-text {
+    overflow-wrap: anywhere;
+}
+
+.pdf-capture-layer .sources-grid {
+    grid-template-columns:
+        repeat(2, minmax(0, 1fr));
+}
+
+.pdf-capture-layer .report-card {
+    padding: 19px;
+}
+
+.pdf-capture-layer .finding-item {
+    padding: 15px;
+}
+
+/* =====================================================
+   RESPONSIVE
+   ===================================================== */
 
 .sidebar-overlay {
     display: none;
@@ -1033,7 +1184,8 @@ input:focus-visible {
     }
 
     .process-track {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns:
+            repeat(2, minmax(0, 1fr));
     }
 
     .result-heading {
